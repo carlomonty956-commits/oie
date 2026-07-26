@@ -1,8 +1,0 @@
-{
-  "rewrites": [
-    {
-      "source": "/(.*)",
-      "destination": "/packages/frontend/index.html"
-    }
-  ]
-}
