@@ -1,12 +1,20 @@
-import { Opportunity, ScoreBreakdown } from '../types'
+import { ScoreBreakdown } from '../types'
 
 export class OpportunityScorer {
   private sourceQualityMap: Map<string, number> = new Map([
     ['reddit', 90],
     ['hackernews', 85],
     ['github', 70],
-    ['rss', 60]
+    ['rss', 60],
+    ['devto', 80],
+    ['lobsters', 75]
   ])
+
+  private learnedKeywordWeights: Record<string, number> = {}
+
+  setLearnedWeights(weights: Record<string, number>) {
+    this.learnedKeywordWeights = weights
+  }
 
   calculateScore(params: {
     keywordScore: number
@@ -15,8 +23,23 @@ export class OpportunityScorer {
     source: string
     createdAt: string
     hasNegative: boolean
+    matchedKeywords?: string[]
   }): { total: number; breakdown: ScoreBreakdown } {
-    const { keywordScore, intentScore, content, source, createdAt, hasNegative } = params
+    const { keywordScore, intentScore, content, source, createdAt, hasNegative, matchedKeywords = [] } = params
+
+    // Adjust keyword score based on learned weights
+    let adjustedKeywordScore = keywordScore
+    if (matchedKeywords.length > 0 && Object.keys(this.learnedKeywordWeights).length > 0) {
+      let weightMultiplier = 1
+      for (const keyword of matchedKeywords) {
+        if (this.learnedKeywordWeights[keyword]) {
+          // Positive weights increase score, negative weights decrease it
+          const weight = this.learnedKeywordWeights[keyword]
+          weightMultiplier += weight * 0.05 // Each weight point adds/subtracts 5%
+        }
+      }
+      adjustedKeywordScore = Math.min(100, Math.round(keywordScore * weightMultiplier))
+    }
 
     // Freshness score: 0-20 based on how recent
     const freshnessScore = this.calculateFreshness(createdAt)
@@ -29,11 +52,11 @@ export class OpportunityScorer {
     const negativePenalty = hasNegative ? -30 : 0
 
     // Calculate total
-    let total = keywordScore + intentScore + freshnessScore + normalizedSourceScore + negativePenalty
+    let total = adjustedKeywordScore + intentScore + freshnessScore + normalizedSourceScore + negativePenalty
     total = Math.max(0, Math.min(100, total))
 
     const breakdown: ScoreBreakdown = {
-      keywordScore,
+      keywordScore: adjustedKeywordScore,
       intentScore,
       freshnessScore,
       sourceScore: normalizedSourceScore,
@@ -49,7 +72,6 @@ export class OpportunityScorer {
     const now = new Date()
     const hoursDiff = (now.getTime() - created.getTime()) / (1000 * 60 * 60)
 
-    // 20 points for < 1 hour, decreasing to 0 after 24 hours
     if (hoursDiff < 1) return 20
     if (hoursDiff < 2) return 18
     if (hoursDiff < 4) return 15

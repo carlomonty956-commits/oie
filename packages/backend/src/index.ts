@@ -12,6 +12,7 @@ import { setupCrawlerRoutes } from './api/routes/crawlers'
 import { setupDashboardRoutes } from './api/routes/dashboard'
 import { setupNotificationRoutes } from './api/routes/notifications'
 import { setupContactRoutes } from './api/routes/contact'
+import { setupLearningRoutes } from './api/routes/learning'
 import { 
   CrawlerManager, 
   CrawlerScheduler, 
@@ -117,6 +118,7 @@ async function start() {
     setupDashboardRoutes(app)
     setupNotificationRoutes(app)
     setupContactRoutes(app)
+    setupLearningRoutes(app)
 
     // Start server
     await app.listen({ port: PORT, host: HOST })
