@@ -1,0 +1,27 @@
+{
+  "name": "oie",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:backend": "npm run dev --workspace=@oie/backend",
+    "dev:frontend": "npm run dev --workspace=@oie/frontend",
+    "build": "npm run build --workspace=@oie/backend && npm run build --workspace=@oie/frontend",
+    "build:backend": "npm run build --workspace=@oie/backend",
+    "build:frontend": "npm run build --workspace=@oie/frontend",
+    "type-check": "npm run type-check --workspace=@oie/backend",
+    "test": "npm run test --workspace=@oie/backend",
+    "db:migrate": "npm run db:migrate --workspace=@oie/backend",
+    "db:seed": "npm run db:seed --workspace=@oie/backend",
+    "clean": "rm -rf node_modules packages/*/node_modules packages/*/dist"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

@@ -1,0 +1,6 @@
+export { IntentDetector } from './services/intent-detector'
+export { ProjectMatcher } from './services/project-matcher'
+export { OpportunityScorer } from './services/opportunity-scorer'
+export { OpportunityManager } from './services/opportunity-manager'
+export { OpportunityProcessor } from './services/opportunity-processor'
+export * from './types'
