@@ -22,7 +22,7 @@ export function OpportunityDetail() {
   // Contact state
   const [showContactModal, setShowContactModal] = useState(false)
   const [contactMessage, setContactMessage] = useState('')
-  const [contactMethod, setContactMethod] = useState('reddit_dm')
+  const [contactMethod, setContactMethod] = useState('external')
   const [contactNotes, setContactNotes] = useState('')
   const [followUpDate, setFollowUpDate] = useState('')
   const [responseText, setResponseText] = useState('')
@@ -115,10 +115,14 @@ export function OpportunityDetail() {
     const map: Record<string, string> = {
       new: 'badge-blue',
       good_lead: 'badge-green',
-      converted: 'badge-green',
+      converted: 'badge-purple',
       rejected: 'badge-gray',
     }
     return map[status] || 'badge-gray'
+  }
+
+  const isStatusDisabled = (status: string) => {
+    return opportunity.status === status
   }
 
   return (
@@ -226,29 +230,31 @@ export function OpportunityDetail() {
                 setShowContactModal(true)
                 refetchContact()
               }}
+              disabled={opportunity.status === 'converted' || opportunity.status === 'rejected'}
             >
               <Send className="h-4 w-4" />
               Contact
             </button>
             <button
+              className="btn bg-green-600 hover:bg-green-700 text-white flex items-center gap-2"
+              onClick={() => statusMutation.mutate('good_lead')}
+              disabled={isStatusDisabled('good_lead') || isStatusDisabled('converted') || isStatusDisabled('rejected')}
+            >
+              <ThumbsUp className="h-4 w-4" />
+              Good Lead
+            </button>
+            <button
               className="btn bg-purple-600 hover:bg-purple-700 text-white flex items-center gap-2"
               onClick={() => statusMutation.mutate('converted')}
+              disabled={isStatusDisabled('converted') || isStatusDisabled('rejected')}
             >
               <CheckCircle className="h-4 w-4" />
               Converted
             </button>
             <button
-              className="btn bg-green-600 hover:bg-green-700 text-white flex items-center gap-2"
-              onClick={() => {
-                setShowResponseModal(true)
-              }}
-            >
-              <MessageSquare className="h-4 w-4" />
-              Log Response
-            </button>
-            <button
               className="btn bg-red-600 hover:bg-red-700 text-white flex items-center gap-2"
               onClick={() => statusMutation.mutate('rejected')}
+              disabled={isStatusDisabled('rejected') || isStatusDisabled('converted')}
             >
               <XCircle className="h-4 w-4" />
               Reject
@@ -304,39 +310,79 @@ export function OpportunityDetail() {
                 Contact Opportunity
               </h3>
               <p className="text-sm text-gray-500 mt-1">
-                Reach out to {opportunity.author || 'the person who posted this'}
+                Contact {opportunity.author || 'the person who posted this'}
               </p>
             </div>
             
             <div className="p-6 space-y-4">
-              {contactData?.contact && (
-                <div className="bg-gray-50 p-3 rounded-lg text-sm">
-                  <p><strong>Author:</strong> {contactData.contact.author}</p>
-                  <p><strong>Source:</strong> {contactData.contact.source}</p>
-                  <p><strong>Post:</strong> <a href={contactData.contact.url} target="_blank" rel="noopener noreferrer" className="text-primary-600 hover:underline">View Original</a></p>
+              {/* Platform Badge */}
+              {contactData?.platform && (
+                <div className="flex items-center gap-2 p-2 bg-blue-50 rounded-lg">
+                  <span className="text-sm font-medium text-blue-700">Platform:</span>
+                  <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs font-medium">
+                    {contactData.platform}
+                  </span>
                 </div>
               )}
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Contact Method</label>
-                <select
-                  className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2"
-                  value={contactMethod}
-                  onChange={(e) => setContactMethod(e.target.value)}
-                >
-                  <option value="reddit_dm">Reddit DM</option>
-                  <option value="reddit_comment">Reddit Comment</option>
-                  <option value="email">Email</option>
-                  <option value="twitter_dm">Twitter/X DM</option>
-                  <option value="linkedin">LinkedIn</option>
-                  <option value="phone">Phone</option>
-                  <option value="other">Other</option>
-                </select>
+              {/* Contact Information */}
+              <div className="bg-gray-50 p-4 rounded-lg space-y-2 border border-gray-200">
+                <h4 className="font-medium text-gray-700">Contact Information</h4>
+                
+                {/* Email */}
+                {contactData?.contact?.email ? (
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-medium text-sm">📧 Email:</span>
+                    <a href={`mailto:${contactData.contact.email}`} className="text-primary-600 hover:underline text-sm break-all">
+                      {contactData.contact.email}
+                    </a>
+                    <button 
+                      onClick={() => navigator.clipboard.writeText(contactData.contact.email)}
+                      className="text-xs bg-gray-200 hover:bg-gray-300 px-2 py-1 rounded"
+                    >
+                      Copy
+                    </button>
+                  </div>
+                ) : (
+                  <div className="text-sm text-gray-500">No email found in this post</div>
+                )}
+                
+                {/* Username */}
+                {contactData?.contact?.username && (
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-medium text-sm">👤 Username:</span>
+                    <span className="text-sm">{contactData.contact.username}</span>
+                    <button 
+                      onClick={() => navigator.clipboard.writeText(contactData.contact.username)}
+                      className="text-xs bg-gray-200 hover:bg-gray-300 px-2 py-1 rounded"
+                    >
+                      Copy
+                    </button>
+                  </div>
+                )}
+                
+                {/* URL */}
+                {contactData?.contact?.url && (
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium text-sm">🔗 URL:</span>
+                    <a href={contactData.contact.url} target="_blank" rel="noopener noreferrer" className="text-primary-600 hover:underline text-sm truncate max-w-xs">
+                      View Original Post
+                    </a>
+                  </div>
+                )}
               </div>
 
+              {/* How to Contact */}
+              <div className="bg-yellow-50 p-3 rounded-lg border border-yellow-200">
+                <p className="text-sm text-yellow-800">
+                  💡 <span className="font-medium">How to contact:</span> Copy the email or username above and reach out directly via email or the platform's messaging system.
+                </p>
+              </div>
+
+              {/* Message */}
               <div>
                 <label className="block text-sm font-medium text-gray-700">
-                  Message
+                  Your Message
                   <button
                     className="ml-2 text-xs text-primary-600 hover:underline"
                     onClick={generateTemplate}
@@ -346,23 +392,14 @@ export function OpportunityDetail() {
                 </label>
                 <textarea
                   className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-                  rows={6}
-                  placeholder="Write your message here..."
+                  rows={4}
+                  placeholder="Write your message here... This will be saved as a note."
                   value={contactMessage}
                   onChange={(e) => setContactMessage(e.target.value)}
                 />
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Follow-up Date</label>
-                <input
-                  type="datetime-local"
-                  className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2"
-                  value={followUpDate}
-                  onChange={(e) => setFollowUpDate(e.target.value)}
-                />
-              </div>
-
+              {/* Notes */}
               <div>
                 <label className="block text-sm font-medium text-gray-700">Notes</label>
                 <textarea
@@ -374,6 +411,7 @@ export function OpportunityDetail() {
                 />
               </div>
 
+              {/* Contact History */}
               {contactData?.history && contactData.history.length > 0 && (
                 <div className="border-t pt-4">
                   <h4 className="text-sm font-medium text-gray-700 mb-2">Contact History</h4>
@@ -381,7 +419,7 @@ export function OpportunityDetail() {
                     {contactData.history.map((h: any) => (
                       <div key={h.id} className="text-sm bg-gray-50 p-2 rounded-lg">
                         <div className="flex justify-between">
-                          <span className="font-medium">{h.method}</span>
+                          <span className="font-medium">{h.method || 'external'}</span>
                           <span className="text-gray-500">{new Date(h.contacted_at).toLocaleDateString()}</span>
                         </div>
                         <p className="text-gray-600 text-xs truncate">{h.message}</p>
@@ -403,7 +441,7 @@ export function OpportunityDetail() {
                   setContactMessage('')
                 }}
               >
-                Cancel
+                Close
               </button>
               <button
                 className="btn btn-primary flex items-center gap-2"
@@ -412,13 +450,13 @@ export function OpportunityDetail() {
                     method: contactMethod,
                     message: contactMessage,
                     followUpAt: followUpDate || undefined,
-                    notes: contactNotes || undefined,
+                    notes: contactNotes || `Contact info: ${contactData?.contact?.contactInfo || ''}`,
                   })
                 }}
                 disabled={!contactMessage.trim()}
               >
-                <Send className="h-4 w-4" />
-                Send & Mark Contacted
+                <CheckCircle className="h-4 w-4" />
+                Mark as Contacted
               </button>
             </div>
           </div>

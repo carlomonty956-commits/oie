@@ -2,35 +2,28 @@ import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify'
 import { OpportunityManager } from '../../opportunity-engine'
 
 export async function setupContactRoutes(app: FastifyInstance) {
-  // Test route (keep this)
-  app.get('/api/contact-test', async (request: FastifyRequest, reply: FastifyReply) => {
-    return { message: 'Contact routes are loaded!' }
-  })
+  const opportunityManager = new OpportunityManager(app.db)
 
-  // Get contact info for an opportunity
+  // GET contact info
   app.get('/api/opportunities/:id/contact', async (request: FastifyRequest, reply: FastifyReply) => {
     const { id } = request.params as { id: string }
     
-    console.log(`📡 Contact route called for opportunity: ${id}`)
-    
     try {
-      const opportunityManager = new OpportunityManager(app.db)
-      const info = await opportunityManager.getContactInfo(id)
-      
-      console.log(`📡 Contact info:`, info)
-      
-      if (!info) {
+      const opportunity = await opportunityManager.getOpportunity(id)
+      if (!opportunity) {
         reply.status(404)
         return { error: 'Opportunity not found' }
       }
 
+      const contactInfo = await opportunityManager.extractContactInfo(id)
       const history = await opportunityManager.getContactHistory(id)
       const template = await opportunityManager.generateMessageTemplate(id)
 
       return { 
-        contact: info, 
+        contact: contactInfo,
         history,
-        template 
+        template,
+        platform: opportunity.source || 'unknown'
       }
     } catch (error) {
       console.error('Error in contact route:', error)
@@ -39,24 +32,24 @@ export async function setupContactRoutes(app: FastifyInstance) {
     }
   })
 
-  // Mark as contacted
+  // POST - Mark as contacted
   app.post('/api/opportunities/:id/contact', async (request: FastifyRequest, reply: FastifyReply) => {
     const { id } = request.params as { id: string }
-    const { method, message, followUpAt, notes } = request.body as {
-      method: string
-      message: string
-      followUpAt?: string
-      notes?: string
-    }
+    const body = request.body as any
+    const { method, message, followUpAt, notes } = body
 
-    if (!method || !message) {
+    if (!message) {
       reply.status(400)
-      return { error: 'Method and message are required' }
+      return { error: 'Message is required' }
     }
 
     try {
-      const opportunityManager = new OpportunityManager(app.db)
-      await opportunityManager.markContacted(id, { method, message, followUpAt, notes })
+      await opportunityManager.markContacted(id, { 
+        method: method || 'external', 
+        message, 
+        followUpAt, 
+        notes 
+      })
       return { success: true }
     } catch (error) {
       console.error('Error marking contacted:', error)
@@ -65,39 +58,17 @@ export async function setupContactRoutes(app: FastifyInstance) {
     }
   })
 
-  // Mark response received
-  app.post('/api/opportunities/:id/response', async (request: FastifyRequest, reply: FastifyReply) => {
-    const { id } = request.params as { id: string }
-    const { responseText } = request.body as { responseText: string }
-
-    if (!responseText) {
-      reply.status(400)
-      return { error: 'Response text is required' }
-    }
-
-    try {
-      const opportunityManager = new OpportunityManager(app.db)
-      await opportunityManager.markResponseReceived(id, responseText)
-      return { success: true }
-    } catch (error) {
-      console.error('Error logging response:', error)
-      reply.status(500)
-      return { error: 'Internal server error' }
-    }
-  })
-
-  // Get message template
+  // GET message template
   app.get('/api/opportunities/:id/template', async (request: FastifyRequest, reply: FastifyReply) => {
     const { id } = request.params as { id: string }
     
     try {
-      const opportunityManager = new OpportunityManager(app.db)
       const template = await opportunityManager.generateMessageTemplate(id)
       return { template }
     } catch (error) {
       console.error('Error generating template:', error)
       reply.status(500)
-      return { error: 'Internal server error' }
+      return { error: 'Failed to generate template' }
     }
   })
 }

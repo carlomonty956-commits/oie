@@ -18,6 +18,15 @@ export class OpportunityManager {
     matchedKeywords: string[]
     matchedIntent: string[]
   }): Promise<Opportunity> {
+    const existing = await this.db.query(
+      'SELECT id FROM opportunities WHERE project_id = ? AND raw_content_id = ?',
+      [params.projectId, params.rawContentId]
+    )
+
+    if (existing.rows.length > 0) {
+      return this.mapOpportunity(existing.rows[0])
+    }
+
     const id = crypto.randomUUID ? crypto.randomUUID() : Date.now().toString()
     
     const result = await this.db.query(
@@ -61,15 +70,13 @@ export class OpportunityManager {
     
     let query = 'SELECT * FROM opportunities WHERE project_id = ?'
     const params: any[] = [projectId]
-    let paramIndex = 2
 
     if (status) {
-      query += ` AND status = ?`
+      query += ' AND status = ?'
       params.push(status)
-      paramIndex++
     }
 
-    query += ` ORDER BY score DESC, created_at DESC LIMIT ? OFFSET ?`
+    query += ' ORDER BY score DESC, created_at DESC LIMIT ? OFFSET ?'
     params.push(limit, offset)
 
     const result = await this.db.query(query, params)
@@ -77,10 +84,13 @@ export class OpportunityManager {
   }
 
   async updateStatus(id: string, status: Opportunity['status']): Promise<void> {
+    const validStatuses = ['new', 'reviewed', 'good_lead', 'converted', 'rejected']
+    if (!validStatuses.includes(status)) {
+      throw new Error(`Invalid status: ${status}`)
+    }
+    
     await this.db.query(
-      `UPDATE opportunities 
-       SET status = ?, updated_at = CURRENT_TIMESTAMP 
-       WHERE id = ?`,
+      'UPDATE opportunities SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
       [status, id]
     )
   }
@@ -133,66 +143,66 @@ export class OpportunityManager {
 
   // ============ CONTACT METHODS ============
 
-  async getContactInfo(opportunityId: string): Promise<any | null> {
+  async extractContactInfo(opportunityId: string): Promise<{
+    email: string | null
+    username: string | null
+    platform: string
+    url: string
+    contactInfo: string
+  }> {
     try {
-      console.log(`🔍 Getting contact info for: ${opportunityId}`)
-      
-      // First get the opportunity
-      const oppResult = await this.db.query(
-        `SELECT * FROM opportunities WHERE id = ?`,
+      const result = await this.db.query(
+        `SELECT o.*, r.source_identifier as source, r.content, r.url, r.author
+         FROM opportunities o
+         LEFT JOIN raw_content r ON o.raw_content_id = r.id
+         WHERE o.id = ?`,
         [opportunityId]
       )
 
-      if (oppResult.rows.length === 0) {
-        console.log(`❌ Opportunity not found: ${opportunityId}`)
-        return null
+      if (result.rows.length === 0) {
+        return { email: null, username: null, platform: 'unknown', url: '', contactInfo: '' }
       }
 
-      const opp = oppResult.rows[0]
-      console.log(`📡 Found opportunity: ${opp.id}, rawContentId: ${opp.raw_content_id}`)
+      const row = result.rows[0]
+      const content = row.content || ''
+      const author = row.author || ''
+      const source = row.source || 'unknown'
+      const url = row.url || ''
 
-      // Try to get raw content by both id and source_identifier
-      let rawContent = null
-      if (opp.raw_content_id) {
-        const rawResult = await this.db.query(
-          `SELECT * FROM raw_content WHERE id = ? OR source_identifier = ?`,
-          [opp.raw_content_id, opp.raw_content_id]
-        )
-        if (rawResult.rows.length > 0) {
-          rawContent = rawResult.rows[0]
-          console.log(`📡 Found raw content: ${rawContent.id}`)
-        } else {
-          console.log(`⚠️ Raw content not found for: ${opp.raw_content_id}`)
-        }
+      const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/gi
+      const emails = content.match(emailRegex) || []
+      const email = emails.length > 0 ? emails[0] : null
+
+      let username = null
+      if (source === 'reddit') {
+        username = author.startsWith('u/') ? author : `u/${author}`
+      } else {
+        username = author || null
       }
 
-      // Return combined data
+      let contactInfo = ''
+      if (email) contactInfo += `Email: ${email}\n`
+      if (username) contactInfo += `Username: ${username}\n`
+      if (source) contactInfo += `Platform: ${source}\n`
+      if (url) contactInfo += `URL: ${url}\n`
+
       return {
-        id: opp.id,
-        title: opp.title || '',
-        url: opp.url || '',
-        author: rawContent?.author || opp.author || 'unknown',
-        source: rawContent?.source_identifier || 'unknown',
-        content: rawContent?.content || opp.content || '',
-        contact_status: opp.contact_status || 'not_contacted',
-        contact_method: opp.contact_method,
-        contact_message: opp.contact_message,
-        contacted_at: opp.contacted_at,
-        follow_up_at: opp.follow_up_at,
-        notes: opp.notes
+        email,
+        username,
+        platform: source,
+        url,
+        contactInfo
       }
     } catch (error) {
-      console.error('Error in getContactInfo:', error)
-      return null
+      console.error('Error extracting contact info:', error)
+      return { email: null, username: null, platform: 'unknown', url: '', contactInfo: '' }
     }
   }
 
   async getContactHistory(opportunityId: string): Promise<any[]> {
     try {
       const result = await this.db.query(
-        `SELECT * FROM contact_history 
-         WHERE opportunity_id = ? 
-         ORDER BY contacted_at DESC`,
+        'SELECT * FROM contact_history WHERE opportunity_id = ? ORDER BY contacted_at DESC',
         [opportunityId]
       )
       return result.rows
@@ -211,8 +221,6 @@ export class OpportunityManager {
     try {
       const userId = 'default-user'
       const id = crypto.randomUUID ? crypto.randomUUID() : Date.now().toString()
-      
-      console.log(`📝 Marking contacted for: ${opportunityId}`)
       
       await this.db.query(
         `INSERT INTO contact_history (id, opportunity_id, user_id, method, message, contacted_at)
@@ -245,21 +253,14 @@ export class OpportunityManager {
 
   async markResponseReceived(opportunityId: string, responseText: string): Promise<void> {
     try {
-      console.log(`📝 Marking response for: ${opportunityId}`)
-      
       const result = await this.db.query(
-        `SELECT id FROM contact_history 
-         WHERE opportunity_id = ? 
-         ORDER BY contacted_at DESC 
-         LIMIT 1`,
+        'SELECT id FROM contact_history WHERE opportunity_id = ? ORDER BY contacted_at DESC LIMIT 1',
         [opportunityId]
       )
 
       if (result.rows.length > 0) {
         await this.db.query(
-          `UPDATE contact_history 
-           SET response_received = 1, response_text = ? 
-           WHERE id = ?`,
+          'UPDATE contact_history SET response_received = 1, response_text = ? WHERE id = ?',
           [responseText, result.rows[0].id]
         )
       }
@@ -289,19 +290,41 @@ export class OpportunityManager {
       const source = info.source || 'the platform'
       const title = info.title || 'your post'
       const url = info.url || ''
+      const contactInfo = await this.extractContactInfo(opportunityId)
 
-      return `Hi ${author},
+      let template = `Hi ${author},\n\nI came across your post on ${source} about "${title}".\n\n`
+      
+      if (contactInfo.email) {
+        template += `I noticed your email: ${contactInfo.email}\n`
+      }
+      if (contactInfo.username) {
+        template += `Your username: ${contactInfo.username}\n`
+      }
+      
+      template += `\n${url ? `Here's a link to your original post: ${url}\n\n` : ''}I'd love to help with this. Can we connect to discuss further?\n\nLooking forward to hearing from you!`
 
-I came across your post on ${source} about "${title}".
-
-${url ? `Here's a link to your original post: ${url}\n` : ''}
-
-I'd love to help with this. Can we connect to discuss further?
-
-Looking forward to hearing from you!`
+      return template
     } catch (error) {
       console.error('Error generating template:', error)
       return 'Error generating template. Please write your message manually.'
+    }
+  }
+
+  async getContactInfo(opportunityId: string): Promise<any | null> {
+    try {
+      const result = await this.db.query(
+        `SELECT o.id, o.title, o.url, o.author, r.source_identifier as source, r.content,
+         o.contact_status, o.contact_method, o.contact_message, o.contacted_at, o.follow_up_at, o.notes
+         FROM opportunities o
+         LEFT JOIN raw_content r ON o.raw_content_id = r.id
+         WHERE o.id = ?`,
+        [opportunityId]
+      )
+      if (result.rows.length === 0) return null
+      return result.rows[0]
+    } catch (error) {
+      console.error('Error in getContactInfo:', error)
+      return null
     }
   }
 

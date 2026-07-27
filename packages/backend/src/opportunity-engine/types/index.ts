@@ -35,6 +35,8 @@ export interface Opportunity {
   status: 'new' | 'reviewed' | 'good_lead' | 'converted' | 'rejected'
   matchedKeywords: string[]
   matchedIntent: string[]
+  source?: string  // <-- ADD THIS LINE
+  author?: string  // <-- ADD THIS LINE (optional)
   createdAt: string
   updatedAt: string
 }

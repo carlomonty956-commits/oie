@@ -23,7 +23,8 @@ import {
   XPlugin,
   DevToPlugin,
   LobstersPlugin,
-  IndieHackersPlugin
+  IndieHackersPlugin,
+  YouTubePlugin
 } from './crawler-platform'
 
 dotenv.config()
@@ -93,7 +94,11 @@ async function start() {
     const indieHackersPlugin = new IndieHackersPlugin()
     crawlerManager.register(indieHackersPlugin)
     
-    console.log('✅ All crawlers registered: Reddit, HackerNews, GitHub, RSS, X, DevTo, Lobsters, IndieHackers')
+    // Add YouTube crawler
+    const youTubePlugin = new YouTubePlugin()
+    crawlerManager.register(youTubePlugin)
+    
+    console.log('✅ All crawlers registered: Reddit, HackerNews, GitHub, RSS, X, DevTo, Lobsters, IndieHackers, YouTube')
 
     // Create scheduler
     crawlerScheduler = new CrawlerScheduler(crawlerManager)
@@ -107,6 +112,7 @@ async function start() {
     await crawlerScheduler.schedule('DevTo', process.env.CRAWLER_INTERVAL_DEVTO || '*/10 * * * *')
     await crawlerScheduler.schedule('Lobsters', process.env.CRAWLER_INTERVAL_LOBSTERS || '*/15 * * * *')
     await crawlerScheduler.schedule('IndieHackers', process.env.CRAWLER_INTERVAL_INDIEHACKERS || '*/20 * * * *')
+    await crawlerScheduler.schedule('YouTube', process.env.CRAWLER_INTERVAL_YOUTUBE || '*/20 * * * *')
     
     console.log('✅ Crawler platform initialized')
 
